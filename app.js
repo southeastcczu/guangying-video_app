@@ -74,11 +74,11 @@ const videos = [
 ];
 
 const platforms = [
-  { name: "腾讯视频", short: "腾", url: "https://v.qq.com/", color: "linear-gradient(135deg,#21d68b,#12a8ff)" },
-  { name: "爱奇艺", short: "爱", url: "https://www.iqiyi.com/", color: "linear-gradient(135deg,#00c765,#78d900)" },
-  { name: "优酷", short: "优", url: "https://www.youku.com/", color: "linear-gradient(135deg,#ff3f69,#2e8dff)" },
-  { name: "哔哩哔哩", short: "哔", url: "https://www.bilibili.com/", color: "linear-gradient(135deg,#4bc2eb,#ed77a9)" },
-  { name: "芒果 TV", short: "芒", url: "https://www.mgtv.com/", color: "linear-gradient(135deg,#ff8a1f,#ffca3a)" }
+  { name: "腾讯视频", short: "腾", url: "https://v.qq.com/", search: query => `https://v.qq.com/x/search/?q=${encodeURIComponent(query)}`, color: "linear-gradient(135deg,#21d68b,#12a8ff)" },
+  { name: "爱奇艺", short: "爱", url: "https://www.iqiyi.com/", search: query => `https://www.iqiyi.com/so/q_${encodeURIComponent(query)}`, color: "linear-gradient(135deg,#00c765,#78d900)" },
+  { name: "优酷", short: "优", url: "https://www.youku.com/", search: query => `https://so.youku.com/search_video/q_${encodeURIComponent(query)}`, color: "linear-gradient(135deg,#ff3f69,#2e8dff)" },
+  { name: "哔哩哔哩", short: "哔", url: "https://www.bilibili.com/", search: query => `https://search.bilibili.com/all?keyword=${encodeURIComponent(query)}`, color: "linear-gradient(135deg,#4bc2eb,#ed77a9)" },
+  { name: "芒果 TV", short: "芒", url: "https://www.mgtv.com/", search: query => `https://so.mgtv.com/so?k=${encodeURIComponent(query)}`, color: "linear-gradient(135deg,#ff8a1f,#ffca3a)" }
 ];
 
 const state = {
@@ -88,6 +88,7 @@ const state = {
   currentId: null,
   favorites: load("gy-favorites", []),
   history: load("gy-history", {}),
+  seriesResults: [],
   deferredInstall: null
 };
 
@@ -96,6 +97,13 @@ const grid = $("#videoGrid");
 const player = $("#videoPlayer");
 const playerDialog = $("#playerDialog");
 const installDialog = $("#installDialog");
+const seriesSection = $("#seriesSearchSection");
+const seriesGrid = $("#seriesGrid");
+const seriesStatus = $("#seriesStatus");
+
+let seriesSearchTimer;
+let seriesSearchController;
+let seriesRequestId = 0;
 
 function load(key, fallback) {
   try { return JSON.parse(localStorage.getItem(key)) ?? fallback; }
@@ -108,6 +116,21 @@ function save(key, value) {
 
 function escapeHTML(value) {
   return String(value).replace(/[&<>'"]/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]);
+}
+
+function plainText(value) {
+  if (!value) return "";
+  const documentFragment = new DOMParser().parseFromString(String(value), "text/html");
+  return documentFragment.body.textContent?.trim() || "";
+}
+
+function safeExternalUrl(value) {
+  try {
+    const url = new URL(String(value));
+    return ["https:", "http:"].includes(url.protocol) ? url.href : "";
+  } catch {
+    return "";
+  }
 }
 
 function progressFor(id) {
@@ -154,6 +177,7 @@ function renderVideos() {
   grid.innerHTML = result.map(cardTemplate).join("");
   $("#resultCount").textContent = `${result.length} 部`;
   $("#emptyState").classList.toggle("hidden", result.length > 0);
+  $("#emptyState p").textContent = state.query ? "本地开放片库没有匹配项，请查看上方的全网剧集结果。" : "换一个关键词或分类试试。";
   const titles = { all: "精选片库", favorites: "我的收藏", recent: "最近观看" };
   $("#libraryTitle").textContent = titles[state.view];
 }
@@ -178,6 +202,105 @@ function renderPlatforms() {
       <span class="platform-logo" style="--platform-color:${platform.color}">${platform.short}</span>
       <span><strong>${platform.name}</strong><br><small>官方服务 ↗</small></span>
     </a>`).join("");
+}
+
+function renderPlatformSearch(query) {
+  $("#platformSearchLinks").innerHTML = platforms.map(platform => `
+    <a class="platform-search-link" href="${platform.search(query)}" target="_blank" rel="noopener noreferrer">${platform.name} ↗</a>
+  `).join("");
+}
+
+function seriesCardTemplate(result) {
+  const show = result.show || {};
+  const image = safeExternalUrl(show.image?.medium || show.image?.original);
+  const officialUrl = safeExternalUrl(show.officialSite || show.webChannel?.officialSite || show.network?.officialSite);
+  const tvmazeUrl = safeExternalUrl(show.url) || "https://www.tvmaze.com/";
+  const year = show.premiered ? show.premiered.slice(0, 4) : "年份未知";
+  const provider = show.webChannel?.name || show.network?.name || show.language || "平台待确认";
+  const genres = Array.isArray(show.genres) && show.genres.length ? show.genres.slice(0, 2).join(" · ") : "电视剧";
+  const summary = plainText(show.summary) || "暂无剧情简介，可打开资料页查看更多信息。";
+  const rating = Number.isFinite(show.rating?.average) ? `★ ${show.rating.average}` : "";
+
+  return `
+    <article class="series-card">
+      <div class="series-poster">
+        ${image ? `<img src="${escapeHTML(image)}" alt="${escapeHTML(show.name || "剧集")}海报" loading="lazy" referrerpolicy="no-referrer">` : '<span class="series-poster-fallback" aria-hidden="true">▣</span>'}
+        ${rating ? `<span class="series-rating">${escapeHTML(rating)}</span>` : ""}
+      </div>
+      <div class="series-copy">
+        <h3 title="${escapeHTML(show.name || "未命名剧集")}">${escapeHTML(show.name || "未命名剧集")}</h3>
+        <p class="series-meta">${escapeHTML(year)} · ${escapeHTML(genres)} · ${escapeHTML(provider)}</p>
+        <p class="series-summary">${escapeHTML(summary)}</p>
+        <div class="series-actions">
+          ${officialUrl ? `<a class="series-action primary" href="${escapeHTML(officialUrl)}" target="_blank" rel="noopener noreferrer">官方页面 ↗</a>` : ""}
+          <a class="series-action" href="${escapeHTML(tvmazeUrl)}" target="_blank" rel="noopener noreferrer">剧集资料 ↗</a>
+        </div>
+      </div>
+    </article>`;
+}
+
+function renderSeriesResults() {
+  seriesGrid.innerHTML = state.seriesResults.map(seriesCardTemplate).join("");
+  $("#seriesResultCount").textContent = state.seriesResults.length ? `${state.seriesResults.length} 条` : "";
+}
+
+async function fetchSeries(query, signal, canRetry = true) {
+  const response = await fetch(`https://api.tvmaze.com/search/shows?q=${encodeURIComponent(query)}`, { signal });
+  if (response.status === 429 && canRetry) {
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(resolve, 1600);
+      signal.addEventListener("abort", () => {
+        clearTimeout(timeout);
+        reject(new DOMException("Aborted", "AbortError"));
+      }, { once: true });
+    });
+    return fetchSeries(query, signal, false);
+  }
+  if (!response.ok) throw new Error(`TV search failed: ${response.status}`);
+  return response.json();
+}
+
+async function searchSeries(query) {
+  const requestId = ++seriesRequestId;
+  seriesSearchController?.abort();
+  seriesSearchController = new AbortController();
+  seriesStatus.textContent = `正在搜索“${query}”…`;
+  state.seriesResults = [];
+  renderSeriesResults();
+
+  try {
+    const results = await fetchSeries(query, seriesSearchController.signal);
+    if (requestId !== seriesRequestId) return;
+    state.seriesResults = Array.isArray(results) ? results.slice(0, 16) : [];
+    renderSeriesResults();
+    seriesStatus.textContent = state.seriesResults.length
+      ? `找到 ${state.seriesResults.length} 条剧集资料。点击“官方页面”或下方正版平台继续观看。`
+      : `没有找到“${query}”的剧集资料，可尝试简称、英文名或直接到正版平台搜索。`;
+  } catch (error) {
+    if (error.name === "AbortError" || requestId !== seriesRequestId) return;
+    seriesStatus.textContent = "剧集资料服务暂时不可用，你仍可使用下方正版平台搜索。";
+  }
+}
+
+function updateSearch(query, immediate = false) {
+  const normalizedQuery = query.trim();
+  state.query = normalizedQuery;
+  renderVideos();
+  clearTimeout(seriesSearchTimer);
+
+  if (!normalizedQuery) {
+    seriesSearchController?.abort();
+    seriesSection.classList.add("hidden");
+    seriesStatus.textContent = "";
+    state.seriesResults = [];
+    renderSeriesResults();
+    return;
+  }
+
+  seriesSection.classList.remove("hidden");
+  renderPlatformSearch(normalizedQuery);
+  if (immediate) searchSeries(normalizedQuery);
+  else seriesSearchTimer = setTimeout(() => searchSeries(normalizedQuery), 450);
 }
 
 function render() {
@@ -265,7 +388,12 @@ document.addEventListener("click", event => {
   if (scroll) document.getElementById(scroll.dataset.scroll)?.scrollIntoView({ behavior: "smooth" });
 });
 
-$("#searchInput").addEventListener("input", event => { state.query = event.target.value; renderVideos(); });
+$("#searchInput").addEventListener("input", event => updateSearch(event.target.value));
+$("#searchForm").addEventListener("submit", event => {
+  event.preventDefault();
+  clearTimeout(seriesSearchTimer);
+  updateSearch($("#searchInput").value, true);
+});
 $("#closePlayer").addEventListener("click", closePlayer);
 playerDialog.addEventListener("click", event => { if (event.target === playerDialog) closePlayer(); });
 player.addEventListener("timeupdate", () => { if (Math.floor(player.currentTime) % 5 === 0) persistProgress(); });
@@ -296,3 +424,9 @@ if ("serviceWorker" in navigator) {
 
 renderPlatforms();
 render();
+
+const initialQuery = new URLSearchParams(window.location.search).get("q")?.trim().slice(0, 100);
+if (initialQuery) {
+  $("#searchInput").value = initialQuery;
+  updateSearch(initialQuery, true);
+}

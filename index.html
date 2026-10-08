@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#070a12">
-  <meta name="description" content="光影盒子：可安装到 iPhone 主屏幕的正版视频入口与公开内容播放器。">
+  <meta name="description" content="光影盒子：全网剧集资料搜索、正版视频入口与公开内容播放器。">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="光影盒子">
@@ -31,9 +31,9 @@
   <main>
     <section class="hero" id="home" aria-labelledby="heroTitle">
       <div class="hero-copy">
-        <p class="eyebrow">OPEN CINEMA · 正版演示</p>
+        <p class="eyebrow">OPEN CINEMA · 全网剧集搜索</p>
         <h1 id="heroTitle">今晚，<br><span>看点好内容。</span></h1>
-        <p class="hero-text">一个轻巧、专注的私人片库入口。公开视频直接播放，会员内容前往官方平台观看。</p>
+        <p class="hero-text">搜索公开剧集资料与正版观看入口。开放影片可直接播放，会员内容前往对应平台观看。</p>
         <div class="hero-actions">
           <button class="primary-button" type="button" data-play="big-buck-bunny"><span aria-hidden="true">▶</span> 立即播放</button>
           <button class="secondary-button" type="button" data-scroll="official">正版平台</button>
@@ -47,12 +47,34 @@
       </button>
     </section>
 
-    <section class="controls" aria-label="查找影片">
-      <label class="search-box">
+    <section class="controls" aria-label="搜索影片与电视剧">
+      <form class="search-box" id="searchForm" role="search">
         <span aria-hidden="true">⌕</span>
-        <input id="searchInput" type="search" placeholder="搜索片名、类型或年份" autocomplete="off">
-      </label>
+        <input id="searchInput" type="search" placeholder="搜索电视剧、片名、类型或年份" autocomplete="off" enterkeyhint="search" maxlength="100" aria-label="搜索电视剧或影片">
+        <button class="search-submit" type="submit">搜索</button>
+      </form>
       <div class="filter-row" id="filters" aria-label="影片分类"></div>
+    </section>
+
+    <section class="content-section series-search-section hidden" id="seriesSearchSection" aria-labelledby="seriesSearchTitle">
+      <div class="section-heading">
+        <div>
+          <p class="section-kicker">LIVE SERIES SEARCH</p>
+          <h2 id="seriesSearchTitle">全网剧集搜索</h2>
+        </div>
+        <span class="result-count" id="seriesResultCount"></span>
+      </div>
+      <p class="series-intro">实时查询公开剧集资料，并前往节目官网或正版视频平台观看。是否需要会员由对应平台决定。</p>
+      <div class="series-status" id="seriesStatus" role="status" aria-live="polite"></div>
+      <div class="series-grid" id="seriesGrid"></div>
+      <div class="platform-search-panel">
+        <div>
+          <p class="section-kicker">SEARCH OFFICIAL SERVICES</p>
+          <h3>在正版平台继续搜索</h3>
+        </div>
+        <div class="platform-search-links" id="platformSearchLinks"></div>
+      </div>
+      <p class="data-credit">剧集资料由 <a href="https://www.tvmaze.com/" target="_blank" rel="noopener noreferrer">TVmaze</a> 提供，采用 <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener noreferrer">CC BY-SA 4.0</a> 许可。</p>
     </section>
 
     <section class="content-section hidden" id="continueSection" aria-labelledby="continueTitle">
